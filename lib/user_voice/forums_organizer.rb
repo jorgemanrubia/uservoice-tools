@@ -97,5 +97,5 @@ end
 
 organizer = UserVoice::ForumsOrganizer.new
 #organizer.move_category_to_forum_for_all_suggestions
-#organizer.delete_all_users_without_email
+organizer.delete_all_users_without_email
 
