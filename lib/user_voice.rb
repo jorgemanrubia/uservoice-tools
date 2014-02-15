@@ -1,0 +1,1 @@
+require 'user_voice/forums_organizer'
