@@ -64,29 +64,38 @@ module UserVoice
 
     def create_forum(forum_name)
       puts "Creating forum #{forum_name}..."
-      client.post('/api/v1/forums.json', {
-          forum: {
-              name: forum_name
-          }
-      })
+      client.post '/api/v1/forums.json',
+                  forum: {
+                      name: forum_name
+                  }
     end
 
     def delete_all_users(owner, users)
       total = users.size
       index = 1 # no #with_index, user_voice collections are not enumerables
       users.each do |user|
-        puts "Deleting user #{user['id']} (#{index}/#{total})"
-        delete_user(owner, user) unless user['email']
+        puts "Deleting user #{user['id']} - #{user['name']} (#{index}/#{total})"
+        delete_user(owner, user) if !user['email'] || user['email'].strip.empty?
         index += 1
       end
     end
 
     def delete_user(owner, user)
-      owner.delete "/api/v1/users/#{user['id']}.json"
+      begin
+        do_delete_user(owner, user)
+      rescue Exception => e
+        puts "Error when deleting #{user['name']}: #{e.message}"
+      end
+    end
+
+    def do_delete_user(owner, user)
+      user['email'] = 'notdasdsdasadsas@blank.com'
+      owner.delete "/api/v1/users/#{user['id']}.json", user: user
     end
   end
 end
 
 organizer = UserVoice::ForumsOrganizer.new
 #organizer.move_category_to_forum_for_all_suggestions
-organizer.delete_all_users_without_email
+#organizer.delete_all_users_without_email
+
