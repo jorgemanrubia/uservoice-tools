@@ -24,6 +24,16 @@ module UserVoice
       end
     end
 
+    def delete_all_users_without_email
+      client.login_as_owner do |owner|
+        users = owner.get_collection("/api/v1/users")
+
+        puts "Processing #{users.size} users..."
+
+        delete_all_users(owner, users)
+      end
+    end
+
     private
 
     def move_category_to_forum_for(suggestion)
@@ -61,8 +71,22 @@ module UserVoice
       })
     end
 
+    def delete_all_users(owner, users)
+      total = users.size
+      index = 1 # no #with_index, user_voice collections are not enumerables
+      users.each do |user|
+        puts "Deleting user #{user['id']} (#{index}/#{total})"
+        delete_user(owner, user) unless user['email']
+        index += 1
+      end
+    end
+
+    def delete_user(owner, user)
+      owner.delete "/api/v1/users/#{user['id']}.json"
+    end
   end
 end
 
 organizer = UserVoice::ForumsOrganizer.new
-organizer.move_category_to_forum_for_all_suggestions
+#organizer.move_category_to_forum_for_all_suggestions
+organizer.delete_all_users_without_email
