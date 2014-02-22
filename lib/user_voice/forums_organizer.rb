@@ -34,6 +34,31 @@ module UserVoice
       end
     end
 
+    def print_all_users
+      users = client.get_collection("/api/v1/users")
+
+      puts "Processing #{users.size} users..."
+
+      users.each do |user|
+        puts "#{user['id']}-#{user['name']}"
+      end
+    end
+
+    #def link_account(user_voice_id, email)
+    #  client.login_as_owner do |owner|
+    #    user_url = "/api/v1/users/#{user_voice_id}.json"
+    #    user = owner.get user_url
+    #    ap user
+    #    #user['user']['email'] = email
+    #    owner.put user_url, {
+    #        user: {
+    #            id: user_voice_id,
+    #            email: 'some@email.com'
+    #        }
+    #    }
+    #  end
+    #end
+
     private
 
     def move_category_to_forum_for(suggestion)
@@ -100,6 +125,9 @@ module UserVoice
 end
 
 organizer = UserVoice::ForumsOrganizer.new
-organizer.move_category_to_forum_for_all_suggestions
+#organizer.move_category_to_forum_for_all_suggestions
+#organizer.print_all_users
 #organizer.delete_all_users_without_email
+#organizer.link_account 47465191, 'jorge.manrubia@gmail.com'
+
 
