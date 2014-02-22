@@ -37,8 +37,13 @@ module UserVoice
     private
 
     def move_category_to_forum_for(suggestion)
-      puts "Moving '#{suggestion['title']}' to forum '#{suggestion['category']['name']}'"
-      move_suggestion_to_forum(suggestion, suggestion['category']['name'])
+      begin
+        return unless suggestion
+        puts "Moving '#{suggestion['title']}' to forum '#{suggestion['category']['name']}'"
+        move_suggestion_to_forum(suggestion, suggestion['category']['name'])
+      rescue Exception => e
+        puts "ERROR when moving '#{suggestion['title']}': #{e.message} - #{e.inspect}"
+      end
     end
 
     def move_suggestion_to_forum(suggestion, forum_name)
@@ -95,6 +100,6 @@ module UserVoice
 end
 
 organizer = UserVoice::ForumsOrganizer.new
-#organizer.move_category_to_forum_for_all_suggestions
-organizer.delete_all_users_without_email
+organizer.move_category_to_forum_for_all_suggestions
+#organizer.delete_all_users_without_email
 
