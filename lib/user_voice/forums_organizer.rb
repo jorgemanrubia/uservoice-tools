@@ -89,7 +89,6 @@ module UserVoice
     end
 
     def do_delete_user(owner, user)
-      user['email'] = 'notdasdsdasadsas@blank.com'
       owner.delete "/api/v1/users/#{user['id']}.json", user: user
     end
   end
