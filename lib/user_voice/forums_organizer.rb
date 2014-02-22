@@ -64,16 +64,19 @@ module UserVoice
     def move_category_to_forum_for(suggestion)
       begin
         return unless suggestion
-        puts "Moving '#{suggestion['title']}' to forum '#{suggestion['category']['name']}'"
-        move_suggestion_to_forum(suggestion, suggestion['category']['name'])
+        forum_name = suggestion['category']['name']
+        category_name = suggestion['topic']['forum']['name']
+        puts "Moving '#{suggestion['title']}' to forum '#{forum_name}' with category '#{category_name}'"
+        move_suggestion_to_forum(suggestion, forum_name, category_name)
       rescue Exception => e
         puts "ERROR when moving '#{suggestion['title']}': #{e.message} - #{e.inspect}"
       end
     end
 
-    def move_suggestion_to_forum(suggestion, forum_name)
+    def move_suggestion_to_forum(suggestion, forum_name, category_name)
       current_forum_id = suggestion['topic']['forum']['id']
       forum_id = forum_by_name(forum_name)['id']
+      suggestion['category_name'] = category_name
       suggestion['forum_id'] = forum_id
       client.put("/api/v1/forums/#{current_forum_id}/suggestions/#{suggestion['id']}.json", suggestion: suggestion)
     end
@@ -125,7 +128,7 @@ module UserVoice
 end
 
 organizer = UserVoice::ForumsOrganizer.new
-#organizer.move_category_to_forum_for_all_suggestions
+organizer.move_category_to_forum_for_all_suggestions
 #organizer.print_all_users
 #organizer.delete_all_users_without_email
 #organizer.link_account 47465191, 'jorge.manrubia@gmail.com'
