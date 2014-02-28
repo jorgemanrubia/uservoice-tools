@@ -11,8 +11,8 @@ module UserVoice
 
     def import
       import_users
-      #import_suggestions
-      #import_comments
+      import_suggestions
+      import_comments
     end
 
     private
@@ -35,7 +35,7 @@ module UserVoice
     #    "Host" => "support.zendone.com"
     #}
     def import_users
-      CSV.foreach(user_voice_data_path.join("users.csv"), headers: true) do |row|
+      each_row_in_csv('users') do |row|
         #puts "#{row['Id']}-#{row['Name']}-#{row['Email']}-#{row['Karma']}"
         ap row.to_hash
       end
@@ -73,7 +73,7 @@ module UserVoice
     #    "Last User Activity At" => "2012-06-07 10:21"
     #}
     def import_suggestions
-      CSV.foreach(user_voice_data_path.join("suggestions.csv"), headers: true) do |row|
+      each_row_in_csv('suggestions') do |row|
         ap row.to_hash
       end
     end
@@ -99,9 +99,13 @@ module UserVoice
     #    "Host" => ""
     #}
     def import_comments
-      CSV.foreach(user_voice_data_path.join("comments.csv"), headers: true) do |row|
+      each_row_in_csv('comments') do |row|
         ap row.to_hash
       end
+    end
+
+    def each_row_in_csv(name, &block)
+      CSV.foreach(user_voice_data_path.join("#{name}.csv"), headers: true, &block)
     end
 
   end
