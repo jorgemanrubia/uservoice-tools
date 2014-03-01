@@ -1,21 +1,41 @@
-require 'awesome_print'
 require 'csv'
+require 'logging'
 
 module UserVoice
   class DiscourseImporter
-    attr_reader :user_voice_data_path
+    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id
 
-    def initialize(user_voice_data_path = '.')
+    def initialize(user_voice_data_path = '.', admin_email)
+      raise "You must set the 'admin_email' environment variable#{admin_email}" unless admin_email.present?
       @user_voice_data_path = Pathname.new(user_voice_data_path)
+      @admin_email = admin_email
+      @users_by_uservoice_id = {}
     end
 
     def import
-      import_users
+      RateLimiter.disable
+      delete_all
       import_suggestions
-      import_comments
+      #import_comments
     end
 
     private
+
+    def logger
+      @@logger ||= begin
+        logger = Logging.logger(STDOUT)
+        logger.level = :debug
+        logger
+      end
+    end
+
+    def delete_all
+      logger.info '** Deleting all...'
+
+      User.where("email <> ?", admin_email).destroy_all
+      Topic.delete_all
+      Post.delete_all
+    end
 
     #{
     #    "Id" => "47477018",
@@ -37,7 +57,7 @@ module UserVoice
     def import_users
       each_row_in_csv('users') do |row|
         #puts "#{row['Id']}-#{row['Name']}-#{row['Email']}-#{row['Karma']}"
-        ap row.to_hash
+        #ap row.to_hash
       end
     end
 
@@ -74,8 +94,62 @@ module UserVoice
     #}
     def import_suggestions
       each_row_in_csv('suggestions') do |row|
-        ap row.to_hash
+        import_suggestion row
       end
+    end
+
+    def import_suggestion(user_voice_suggestion)
+      title = user_voice_suggestion['Title']
+      description = user_voice_suggestion['Description']
+      author = find_or_create_user(user_voice_suggestion['User ID'], user_voice_suggestion['User Name'], user_voice_suggestion['User Email'])
+      like_count = user_voice_suggestion['Votes']
+      category = nil
+      logger.info("TOPIC: creating '#{user_voice_suggestion['Title']}' by #{author.email} (votes #{user_voice_suggestion['Votes']})")
+      new_post = PostCreator.new(author, raw: description, title: title, category: category,
+                                 skip_validations: true, created_at: user_voice_suggestion['Created At'],
+                                 last_posted_at: user_voice_suggestion['Last User Activity At']).create
+      new_post.topic.update_column :like_count, like_count
+    end
+
+    def find_or_create_user(user_id, user_name, user_email)
+      user_email = user_email.presence || email_from_user_name(user_name)
+      user = users_by_uservoice_id[user_id] || User.find_by_email(user_email) || User.find_by_email(user_email) || create_user(user_name, user_email)
+      users_by_uservoice_id[user_id] ||= user
+      user
+    end
+
+    def create_user(user_name, email)
+      user_name = to_valid_discourse_name(user_name)
+      user_name = ensure_unique_username(user_name)
+      email = to_valid_email(email, user_name)
+      logger.info("USER: creating #{user_name} - #{email}")
+      User.create!(username: user_name, email: email, password: '123456')
+    end
+
+    def ensure_unique_username(user_name)
+      count = 1
+      while User.find_by_username(user_name)
+        user_name = "#{user_name}#{count}"
+        count += 1
+      end
+      user_name
+    end
+
+    def to_valid_email(email, user_name)
+      email.presence || email_from_user_name(user_name)
+    end
+
+    def to_valid_discourse_name(user_name)
+      invalid_discourse_chars = /[^0-9A-Za-z_]/
+      name = user_name.gsub(invalid_discourse_chars, '_')[0..14]
+      name = name.gsub(/^(_)+/, '')
+      name = "#{name}#{1234}" unless name.length >= 3
+      name
+    end
+
+    def email_from_user_name(user_name)
+      name = user_name.parameterize.gsub('-', '.')
+      "#{name}.anonymous@zendone.com"
     end
 
     #{
@@ -100,7 +174,7 @@ module UserVoice
     #}
     def import_comments
       each_row_in_csv('comments') do |row|
-        ap row.to_hash
+        #ap row.to_hash
       end
     end
 
@@ -111,5 +185,5 @@ module UserVoice
   end
 end
 
-importer = UserVoice::DiscourseImporter.new('../../data')
+importer = UserVoice::DiscourseImporter.new('lib/data', ENV['admin_email'])
 importer.import
