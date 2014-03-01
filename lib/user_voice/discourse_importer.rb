@@ -6,7 +6,7 @@ module UserVoice
     attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id
 
     def initialize(user_voice_data_path = '.', admin_email)
-      raise "You must set the 'admin_email' environment variable#{admin_email}" unless admin_email.present?
+      raise "You must set the 'ADMIN_EMAIL' environment variable#{admin_email}" unless admin_email.present?
       @user_voice_data_path = Pathname.new(user_voice_data_path)
       @admin_email = admin_email
       @users_by_uservoice_id = {}
@@ -185,5 +185,5 @@ module UserVoice
   end
 end
 
-importer = UserVoice::DiscourseImporter.new('lib/data', ENV['admin_email'])
+importer = UserVoice::DiscourseImporter.new('lib/data', ENV['ADMIN_EMAIL'])
 importer.import
