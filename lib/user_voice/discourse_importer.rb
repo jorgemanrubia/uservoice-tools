@@ -3,7 +3,7 @@ require 'logging'
 
 module UserVoice
   class DiscourseImporter
-    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id, :admin_user
+    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id, :admin_user, :topics_by_uservoice_id
 
     def initialize(user_voice_data_path = '.', admin_email)
       raise "You must set the 'ADMIN_EMAIL' environment variable#{admin_email}" unless admin_email.present?
@@ -11,13 +11,14 @@ module UserVoice
       @admin_email = admin_email
       @admin_user = User.find_by_email(@admin_email)
       @users_by_uservoice_id = {}
+      @topics_by_uservoice_id = {}
     end
 
     def import
       RateLimiter.disable
       delete_all
       import_suggestions
-      #import_comments
+      import_comments
     end
 
     private
@@ -113,12 +114,14 @@ module UserVoice
 
       new_post.topic.assign_attributes like_count: like_count, bumped_at: user_voice_suggestion['Created At']
       new_post.topic.save!(validate: false)
+
+      topics_by_uservoice_id[user_voice_suggestion['Id']] = new_post.topic
     end
 
     def find_or_create_user(user_id, user_name, user_email)
       user_email = user_email.presence || email_from_user_name(user_name)
       user = users_by_uservoice_id[user_id] || User.find_by_email(user_email) || User.find_by_email(user_email) || create_user(user_name, user_email)
-      users_by_uservoice_id[user_id] ||= user
+      users_by_uservoice_id[user_id] ||= user if user_id
       user
     end
 
@@ -188,8 +191,29 @@ module UserVoice
     #}
     def import_comments
       each_row_in_csv('comments') do |row|
-        #ap row.to_hash
+        import_comment row
       end
+    end
+
+    def import_comment(uservoice_comment)
+      description = uservoice_comment['Text']
+      topic = find_or_create_topic(uservoice_comment['Suggestion ID'], uservoice_comment['Suggestion Title'])
+      author = find_or_create_user(uservoice_comment['User Id'], uservoice_comment['User Name'], uservoice_comment['User Email'])
+
+      logger.info("COMMENT: creating comment from '#{author.email}' in '#{topic.title}'")
+
+      new_post = PostCreator.new(author, raw: description, skip_validations: true, topic_id: topic.id, created_at: uservoice_comment['Created At']).create
+      new_post.topic.assign_attributes bumped_at: uservoice_comment['Created At']
+      new_post.topic.save!(validate: false)
+
+    rescue Exception => e
+      logger.error "Error importing comment... #{e.message}"
+    end
+
+    def find_or_create_topic(user_voice_suggestion_id, user_voice_suggestion_title)
+      sanitized_title = TextCleaner.clean_title(TextSentinel.title_sentinel(user_voice_suggestion_title).text)
+      topics_by_uservoice_id[user_voice_suggestion_id] or Topic.where("title ilike ?", sanitized_title).first or
+          Topic.where("title ilike ?", sanitized_title.gsub("!", '')).first or Topic.find_by_title(user_voice_suggestion_title) or raise "No suggestion found for id=#{user_voice_suggestion_id} and title='#{sanitized_title}'"
     end
 
     def each_row_in_csv(name, &block)
