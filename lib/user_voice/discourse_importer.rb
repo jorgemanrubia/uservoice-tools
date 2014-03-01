@@ -3,12 +3,13 @@ require 'logging'
 
 module UserVoice
   class DiscourseImporter
-    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id
+    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id, :admin_user
 
     def initialize(user_voice_data_path = '.', admin_email)
       raise "You must set the 'ADMIN_EMAIL' environment variable#{admin_email}" unless admin_email.present?
       @user_voice_data_path = Pathname.new(user_voice_data_path)
       @admin_email = admin_email
+      @admin_user = User.find_by_email(@admin_email)
       @users_by_uservoice_id = {}
     end
 
@@ -33,6 +34,7 @@ module UserVoice
       logger.info '** Deleting all...'
 
       User.where("email <> ?", admin_email).destroy_all
+      Category.delete_all
       Topic.delete_all
       Post.delete_all
     end
@@ -103,12 +105,14 @@ module UserVoice
       description = user_voice_suggestion['Description']
       author = find_or_create_user(user_voice_suggestion['User ID'], user_voice_suggestion['User Name'], user_voice_suggestion['User Email'])
       like_count = user_voice_suggestion['Votes']
-      category = nil
-      logger.info("TOPIC: creating '#{user_voice_suggestion['Title']}' by #{author.email} (votes #{user_voice_suggestion['Votes']})")
-      new_post = PostCreator.new(author, raw: description, title: title, category: category,
-                                 skip_validations: true, created_at: user_voice_suggestion['Created At'],
-                                 last_posted_at: user_voice_suggestion['Last User Activity At']).create
-      new_post.topic.update_column :like_count, like_count
+      category = find_or_create_category(user_voice_suggestion['Forum Name'], user_voice_suggestion['Category'])
+
+      logger.info("TOPIC: creating '#{user_voice_suggestion['Title']}' by #{author.email} (votes #{user_voice_suggestion['Votes']} on #{user_voice_suggestion['Created At']})")
+      new_post = PostCreator.new(author, raw: description, title: title, category: category.name,
+                                 skip_validations: true, created_at: user_voice_suggestion['Created At']).create
+
+      new_post.topic.assign_attributes like_count: like_count, bumped_at: user_voice_suggestion['Created At']
+      new_post.topic.save!(validate: false)
     end
 
     def find_or_create_user(user_id, user_name, user_email)
@@ -119,7 +123,7 @@ module UserVoice
     end
 
     def create_user(user_name, email)
-      user_name = to_valid_discourse_name(user_name)
+      user_name = to_valid_discourse_user_name(user_name)
       user_name = ensure_unique_username(user_name)
       email = to_valid_email(email, user_name)
       logger.info("USER: creating #{user_name} - #{email}")
@@ -139,12 +143,22 @@ module UserVoice
       email.presence || email_from_user_name(user_name)
     end
 
-    def to_valid_discourse_name(user_name)
+    def to_valid_discourse_user_name(user_name)
       invalid_discourse_chars = /[^0-9A-Za-z_]/
       name = user_name.gsub(invalid_discourse_chars, '_')[0..14]
       name = name.gsub(/^(_)+/, '')
       name = "#{name}#{1234}" unless name.length >= 3
       name
+    end
+
+    def find_or_create_category(category_name, subcategory_name)
+      category_name = category_name.strip
+      subcategory_name = (subcategory_name.present? && "#{category_name}-#{subcategory_name.strip}") || nil
+
+      category = Category.find_by_name(category_name) || Category.create!(name: category_name, user: admin_user)
+      return category unless subcategory_name
+      Category.create!(name: subcategory_name, user: admin_user, parent_category: category) unless Category.find_by_name(subcategory_name)
+      category
     end
 
     def email_from_user_name(user_name)
