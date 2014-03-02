@@ -19,6 +19,7 @@ module UserVoice
       delete_all
       import_suggestions
       import_comments
+      update_statistics_for_all_topics
     end
 
     private
@@ -218,6 +219,12 @@ module UserVoice
 
     def each_row_in_csv(name, &block)
       CSV.foreach(user_voice_data_path.join("#{name}.csv"), headers: true, &block)
+    end
+
+    def update_statistics_for_all_topics
+      Topic.find_each do |topic|
+        topic.update_statistics
+      end
     end
 
   end
