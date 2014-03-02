@@ -20,6 +20,7 @@ module UserVoice
       import_suggestions
       import_comments
       update_statistics_for_all_topics
+      delete_about_category_topics
     end
 
     private
@@ -114,9 +115,14 @@ module UserVoice
                                  skip_validations: true, created_at: user_voice_suggestion['Created At']).create
 
       new_post.topic.assign_attributes like_count: like_count, bumped_at: user_voice_suggestion['Created At']
+      new_post.topic.update_status('closed', true, admin_user) if suggestion_completed?(user_voice_suggestion)
       new_post.topic.save!(validate: false)
 
       topics_by_uservoice_id[user_voice_suggestion['Id']] = new_post.topic
+    end
+
+    def suggestion_completed?(user_voice_suggestion)
+      user_voice_suggestion && user_voice_suggestion['Response Status'].downcase == 'completed'
     end
 
     def find_or_create_user(user_id, user_name, user_email)
@@ -223,10 +229,14 @@ module UserVoice
 
     def update_statistics_for_all_topics
       Topic.find_each do |topic|
+        def topic.update_action_counts; end # we don't want to lose the 'likes' (they are not individually counted in uservoice)!
         topic.update_statistics
       end
     end
 
+    def delete_about_category_topics
+      Topic.where("title ilike 'About the%category'").destroy_all
+    end
   end
 end
 
