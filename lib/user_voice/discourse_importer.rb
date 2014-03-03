@@ -19,6 +19,7 @@ module UserVoice
       delete_all
       import_suggestions
       import_comments
+      close_comments
       update_statistics_for_all_topics
       delete_about_category_topics
     end
@@ -115,7 +116,7 @@ module UserVoice
                                  skip_validations: true, created_at: user_voice_suggestion['Created At']).create
 
       new_post.topic.assign_attributes like_count: like_count, bumped_at: user_voice_suggestion['Created At']
-      new_post.topic.update_status('closed', true, admin_user) if suggestion_completed?(user_voice_suggestion)
+      #new_post.topic.update_status('closed', true, admin_user) if suggestion_completed?(user_voice_suggestion)
       new_post.topic.save!(validate: false)
 
       topics_by_uservoice_id[user_voice_suggestion['Id']] = new_post.topic
@@ -200,6 +201,18 @@ module UserVoice
       each_row_in_csv('comments') do |row|
         import_comment row
       end
+    end
+
+    def close_comments
+      each_row_in_csv('suggestions') do |user_voice_suggestion|
+        close_topic(user_voice_suggestion) if suggestion_completed?(user_voice_suggestion)
+      end
+    end
+
+    def close_topic(user_voice_suggestion)
+      topic = topics_by_uservoice_id[user_voice_suggestion['Id']]
+      topic.update_status('closed', true, admin_user)
+      new_post.topic.save!(validate: false)
     end
 
     def import_comment(uservoice_comment)
