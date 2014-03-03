@@ -3,7 +3,7 @@ require 'logging'
 
 module UserVoice
   class DiscourseImporter
-    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id, :admin_user, :topics_by_uservoice_id
+    attr_reader :user_voice_data_path, :admin_email, :users_by_uservoice_id, :admin_user, :topics_by_uservoice_id, :gs_topics_by_type
 
     def initialize(user_voice_data_path = '.', admin_email)
       raise "You must set the 'ADMIN_EMAIL' environment variable#{admin_email}" unless admin_email.present?
@@ -12,6 +12,7 @@ module UserVoice
       @admin_user = User.find_by_email(@admin_email)
       @users_by_uservoice_id = {}
       @topics_by_uservoice_id = {}
+      @gs_topics_by_type = load_gs_topics
     end
 
     def import
@@ -43,30 +44,14 @@ module UserVoice
       Post.delete_all
     end
 
-    #{
-    #    "Id" => "47477018",
-    #    "Guid" => "",
-    #    "Karma" => "5127",
-    #    "Name" => "Jorge",
-    #    "Email" => "jorge.manrubia@gmail.com",
-    #    "Email Confirmed" => "true",
-    #    "Last Login" => "2014-02-27 22:43",
-    #    "Created At" => "2014-02-22 16:01",
-    #    "Updated At" => "2014-02-28 11:31",
-    #    "Referrer" => "",
-    #    "Ip" => "37.11.31.110",
-    #    "User Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.117 Safari/537.36",
-    #    "Accept Language" => "es,en;q=0.8",
-    #    "Accept Charset" => "",
-    #    "Host" => "support.zendone.com"
-    #}
-    def import_users
-      each_row_in_csv('users') do |row|
-        #puts "#{row['Id']}-#{row['Name']}-#{row['Email']}-#{row['Karma']}"
-        #ap row.to_hash
+    def load_gs_topics
+      gs_topics_by_type = {}
+      each_row_in_csv('topics-GS') do |row|
+        gs_topics_by_type[row['Type']] ||= Set.new
+        gs_topics_by_type[row['Type']] << row['Subject']
       end
+      gs_topics_by_type
     end
-
 
     #{
     #    "Id" => "5555113",
@@ -109,7 +94,7 @@ module UserVoice
       description = user_voice_suggestion['Description']
       author = find_or_create_user(user_voice_suggestion['User ID'], user_voice_suggestion['User Name'], user_voice_suggestion['User Email'])
       like_count = user_voice_suggestion['Votes']
-      category = find_or_create_category(user_voice_suggestion['Forum Name'], user_voice_suggestion['Category'])
+      category = find_or_create_category(forum_name(user_voice_suggestion), user_voice_suggestion['Category'])
 
       logger.info("TOPIC: creating '#{user_voice_suggestion['Title']}' by #{author.email} (votes #{user_voice_suggestion['Votes']} on #{user_voice_suggestion['Created At']})")
       new_post = PostCreator.new(author, raw: description, title: title, category: category.name,
@@ -120,6 +105,15 @@ module UserVoice
       new_post.topic.save!(validate: false)
 
       topics_by_uservoice_id[user_voice_suggestion['Id']] = new_post.topic
+    end
+
+    def forum_name(user_voice_suggestion)
+      title_without_quotes = user_voice_suggestion['Title'].gsub('"', '')
+      puts "Buscando '#{title_without_quotes}'"
+      ap gs_topics_by_type['problem']
+      return 'problem' if gs_topics_by_type['problem'].include?(title_without_quotes)
+      return 'question' if gs_topics_by_type['question'].include?(title_without_quotes)
+      user_voice_suggestion['Forum Name']
     end
 
     def suggestion_completed?(user_voice_suggestion)
@@ -242,7 +236,10 @@ module UserVoice
 
     def update_statistics_for_all_topics
       Topic.find_each do |topic|
-        def topic.update_action_counts; end # we don't want to lose the 'likes' (they are not individually counted in uservoice)!
+        def topic.update_action_counts;
+        end
+
+        # we don't want to lose the 'likes' (they are not individually counted in uservoice)!
         topic.update_statistics
       end
     end
