@@ -109,8 +109,6 @@ module UserVoice
 
     def forum_name(user_voice_suggestion)
       title_without_quotes = user_voice_suggestion['Title'].gsub('"', '')
-      puts "Buscando '#{title_without_quotes}'"
-      ap gs_topics_by_type['problem']
       return 'problem' if gs_topics_by_type['problem'].include?(title_without_quotes)
       return 'question' if gs_topics_by_type['question'].include?(title_without_quotes)
       user_voice_suggestion['Forum Name']
